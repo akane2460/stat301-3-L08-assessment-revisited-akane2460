@@ -1,0 +1,216 @@
+---
+title: "L08 Assessment Revisited"
+subtitle: "Data Science 3 with R (STAT 301-3)"
+author: "Allison Kane"
+pagetitle: "L08 Allison Kane"
+date: today
+
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    toc-location: left
+    embed-resources: true
+    code-fold: false
+    link-external-newwindow: true
+
+execute:
+  warning: false
+  
+from: markdown+emoji
+reference-location: margin
+citation-location: margin
+---
+
+::: {.callout-tip icon=false}
+
+## Github Repo Link
+
+[Allison Repo Link](https://github.com/stat301-3-2024-spring/L08-assessment-revisited-akane2460.git)
+
+:::
+
+## Overview
+
+The main goal of this lab is to have students think more about performance metrics, especially those used for classification.
+
+## Exercises
+
+### Exercise 1
+
+When considering classification metric it is important to understand the 4 essential terms below. Provide a definition for each:
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+- **True positives (TP):** are an instance where the model correctly predicts a positive value for the circumstance. For example, a patient has signs of having Covid-19 and the model accurately predicts that they are positive for Covid-19.
+
+- **True negatives (TN):** are an instance where the model correctly predicts a negative value for the circumstance. For example, the model accurately predicts that a patient does *not* have Covid-19.
+
+- **False positives (FP):** are an instance where the model incorrectly predicts a positive value for the circumstance, where its true value is actually negative. For example, the model inaccurately diagnoses a patient with Covid-19, when they do not have it.
+
+- **False negatives (FN):** are an instance where the model incorrectly predicts a negative value for the circumstance where its true value is actually positive. For example, the model inaccurately predicts a patient to be negative for Covid-19, when in fact they do have the virus.
+
+:::
+
+While the general definitions are useful it is vital to be able to interpret each in the context of a problem. 
+
+Suppose we are attempting to classify an email as spam or not spam. We consider the prediction of spam to be a success or positive condition. 
+
+Define each each of the terms and describe the consequence of each (what happens to the email) in the context of this problem:
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+- **True positives (TP):** the model correctly flags a spam email as spam (positive, successful)
+
+- **True negatives (TN):** the model correctly ignores a non-spam email (negative, successful)
+
+- **False positives (FP):** the model incorrectly flags a non-spam email as spam (positive, unsuccessful)
+
+- **False negatives (FN):** the model incorrectly ignores a spam email (negative, unsuccessful)
+
+:::
+
+### Exercise 2
+
+Using the email example again, suppose we are attempting to classify an email as spam or not spam. We consider the prediction of spam to be a success or positive condition.
+
+Describe each of the metrics in context of our example and indicate how to use the metric (meaning is a lower or higher value better):
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+- **Accuracy:** describes the model's overall correctness in predicting spam vs. non-spam emails, typically in the ratio of number of correct predictions to number of overall predictions. The higher the value the better the model performs (marking more spam emails as spam).
+
+- **Precision:** describes the model's positive prediction correctness, essentially of the emails marked as spam, how many of them are truly spam. A higher value the better the model performs (marking fewer non-spam emails as spam).
+
+- **Recall:** describes the model's ability to detect true positives among all positives (proportion of actual true positives among all positives detected) Essentially, this measures the amount of detected spam emails among all spam emails sent. The higher the value the better then model performs (marking more spam emails as spam and missing fewer spam emails).
+
+- **Sensitivity:** is the same in practice as recall. It describes the model's ability to detect true positives among all positives. 
+
+- **Specificity:** describes the model's ability to detect true negatives among all negatives detected. Essentially, this measures the amount of true non-spam emails detected among all emails labeled as non-spam. The higher this value, the better the model performs (marking more truly non-spam emails as non-spam and failing to flag fewer spam emails).
+
+:::
+
+### Exercise 3
+
+Name one metric that you would use if you are trying to balance recall and precision. Also indicate how to read/use the metric to compare models.  
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+A metric that helps balance recall and precision is the F-1 score. The F-1 score is a harmonic mean of the model's precision and its recall. It combines these two to provide a clear assessment metric of the model's performance. F-1 score ranges from 0 to 1, with a higher score indicating better performance and greater balance between recall and precision. The metric is useful in assessing model performance where false negatives and false positives are of particular concern. 
+
+:::
+
+### Exercise 4
+
+Below is the basic code setup for tuning a nearest neighbor model. By default the accuracy and AUC performance metrics are calculated. Suppose that in addition to these two default performance metrics we wanted to also calculate precision, recall, sensitivity, specificity, and an F measure. Modify the script below so that all desired performance metrics are calculated during the tuning step. 
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+```{r}
+#| label: knn-tuning
+#| eval: false
+
+# Knn tuning ----
+
+# Load package(s) ----
+library(tidyverse)
+library(tidymodels)
+library(doMC)
+
+# register cores/threads for parallel processing
+num_cores <- parallel::detectCores(logical = TRUE)
+registerDoMC(cores = num_cores - 1)
+
+# Handle conflicts
+tidymodels_prefer()
+
+# load required objects ----
+load("data_splits/data_folds.rda")
+load("recipes/basic_recipe.rda")
+
+# model specification ----
+knn_spec <- nearest_neighbor(
+  neighbors = tune()
+  ) |>
+  set_mode("classification") |> 
+  set_engine("kknn")
+
+# workflow ----
+knn_wflow <- 
+  workflow() |>
+  add_model(knn_spec) |>
+  add_recipe(basic_recipe)
+
+# # check tuning parameters
+# hardhat::extract_parameter_set_dials(knn_spec)
+
+# set-up tuning grid ----
+knn_params <- hardhat::extract_parameter_set_dials(knn_spec) |>
+  update(neighbors = neighbors(range = c(1,40)))
+
+# define grid
+knn_grid <- grid_regular(knn_params, levels = 15)
+
+# custom metrics set
+custom_metrics <- metric_set(
+  accuracy,
+  roc_auc,
+  precision,
+  recall,
+  sens,
+  spec,
+  f_meas
+)
+
+# Tuning/fitting ----
+# seed
+set.seed(2468)
+knn_tune <- 
+  knn_wflow |>
+  tune_grid(
+    resamples = data_folds,
+    grid = knn_grid,
+    metrics = custom_metrics,
+    control = control_grid(save_workflow = TRUE)
+  )
+
+# Write out results ----
+save(knn_tune, file = "results/knn_tune.rda")
+```
+
+:::
+
+There is some redundancy in the set of performance metrics we are using. What is it?
+
+::: {.callout-tip icon=false}
+
+Recall and sensitivity together are redundant. 
+
+:::
+
+### Exercise 5
+
+When conducting regression ML probelms we have used root mean squared error and R squared. In a few cases we made use of mean absolute error. 
+
+Name at least 2 other regression performance metrics and their functions in our `tidymodels` framework. Provide a description of the metric and how to use it to understand a model's performance. 
+
+::: {.callout-tip icon=false}
+
+## Solution
+
+A performance metric is mean square error (MSE). MSE measures the average squares of the difference between actual and predicted values. The higher the MSE, the worse the performance. This metric is sensitive to outliers, so large differences in actual and predicted values have a greater effect. This could be valuable in assessing model performance in instances with varied datasets with some outliers.
+
+Another performance metric is root mean squared log error (RMSLE). RMSLE takes root of the squared differences between logs of the actual and predicted values. It is a variation of RMSE. It is particularly useful when predicted and actual values are very large, in instances like measuring home prices, populations, etc. 
+
+
+:::
